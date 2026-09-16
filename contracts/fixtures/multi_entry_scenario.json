@@ -1,0 +1,77 @@
+{
+  "scenario": "multi_entry_user_balance_upgrade",
+  "description": "Multi-entry migration of user account records from V1 (owner, balance) to V2 (owner, balance, version: 2) preserving all individual user balances and account identities across the entire contract state.",
+  "invariants": [
+    "all user owners must remain unchanged",
+    "all user balances must remain unchanged",
+    "entry count must remain exactly 3",
+    "version field must equal 2 for all migrated records"
+  ],
+  "entries_before": [
+    {
+      "key": {
+        "type": "User",
+        "owner": "GDIY6AQQ75WMD4W46EYB7O6UYMHOCGQHJCQYNKP4XZB2Z2N5V4M5QO6B"
+      },
+      "value": {
+        "owner": "GDIY6AQQ75WMD4W46EYB7O6UYMHOCGQHJCQYNKP4XZB2Z2N5V4M5QO6B",
+        "balance": 100
+      }
+    },
+    {
+      "key": {
+        "type": "User",
+        "owner": "GBZXN7PIRZGNMHGA728RGRTDGBLTCGXGEDM3GT3YTISSXUPQEYO6CQGD"
+      },
+      "value": {
+        "owner": "GBZXN7PIRZGNMHGA728RGRTDGBLTCGXGEDM3GT3YTISSXUPQEYO6CQGD",
+        "balance": 250
+      }
+    },
+    {
+      "key": {
+        "type": "User",
+        "owner": "GACQ52L6CVSK7O6R3T4D2V6FHKJMYW4R5U7E2B4Z1M8X9P0Q7C5V3A1B"
+      },
+      "value": {
+        "owner": "GACQ52L6CVSK7O6R3T4D2V6FHKJMYW4R5U7E2B4Z1M8X9P0Q7C5V3A1B",
+        "balance": 500
+      }
+    }
+  ],
+  "entries_after": [
+    {
+      "key": {
+        "type": "User",
+        "owner": "GDIY6AQQ75WMD4W46EYB7O6UYMHOCGQHJCQYNKP4XZB2Z2N5V4M5QO6B"
+      },
+      "value": {
+        "owner": "GDIY6AQQ75WMD4W46EYB7O6UYMHOCGQHJCQYNKP4XZB2Z2N5V4M5QO6B",
+        "balance": 100,
+        "version": 2
+      }
+    },
+    {
+      "key": {
+        "type": "User",
+        "owner": "GBZXN7PIRZGNMHGA728RGRTDGBLTCGXGEDM3GT3YTISSXUPQEYO6CQGD"
+      },
+      "value": {
+        "owner": "GBZXN7PIRZGNMHGA728RGRTDGBLTCGXGEDM3GT3YTISSXUPQEYO6CQGD",
+        "balance": 250,
+        "version": 2
+      }
+    },
+    {
+      "key": {
+        "type": "User",
+        "owner": "GACQ52L6CVSK7O6R3T4D2V6FHKJMYW4R5U7E2B4Z1M8X9P0Q7C5V3A1B"
+      },
+      "value": {
+        "owner": "GACQ52L6CVSK7O6R3T4D2V6FHKJMYW4R5U7E2B4Z1M8X9P0Q7C5V3A1B",
+        "balance": 500,
+        "version": 2
+      }
+    }
+  ]
+}

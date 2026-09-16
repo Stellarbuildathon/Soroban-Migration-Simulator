@@ -1113,4 +1113,44 @@ mod tests {
             .any(|c| matches!(c, NestedChange::ItemAdded { .. }));
         assert!(has_z_added, "Should detect 'z' map entry addition");
     }
+
+    #[test]
+    fn test_multi_entry_fixture_files_diff() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let v1_path = manifest_dir.join("../../contracts/fixtures/state/multi-entry-v1-state.json");
+        let v2_path =
+            manifest_dir.join("../../contracts/fixtures/state/multi-entry-v2-expected-state.json");
+
+        let pre =
+            ContractState::from_file(v1_path.to_str().unwrap()).expect("Load multi-entry v1 state");
+        let post =
+            ContractState::from_file(v2_path.to_str().unwrap()).expect("Load multi-entry v2 state");
+
+        assert_eq!(pre.entries.len(), 3, "Pre-state must have 3 entries");
+        assert_eq!(post.entries.len(), 3, "Post-state must have 3 entries");
+
+        let diff = pre.diff(&post);
+
+        assert_eq!(diff.added_count(), 0);
+        assert_eq!(diff.removed_count(), 0);
+        assert_eq!(diff.unchanged_count(), 0);
+        assert_eq!(diff.modified_count(), 3);
+        assert!(diff.has_changes());
+
+        for modified in &diff.modified {
+            let has_version = modified.nested_changes.iter().any(|c| {
+                matches!(
+                    c,
+                    NestedChange::FieldAdded {
+                        field_name,
+                        value,
+                    } if field_name == "version" && value == &StateValue::U32(2)
+                )
+            });
+            assert!(
+                has_version,
+                "Expected version field added to each user entry"
+            );
+        }
+    }
 }

@@ -315,6 +315,18 @@ mod tests {
         std::fs::read(&path).expect("Failed to read V2 WASM. Run `cargo build --target wasm32v1-none -p migration_v2` first.")
     }
 
+    fn load_multi_entry_v1_wasm() -> Vec<u8> {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("../../target/wasm32v1-none/release/multi_entry_v1.wasm");
+        std::fs::read(&path).expect("Failed to read multi_entry_v1 WASM. Run `cargo build --target wasm32v1-none -p multi_entry_v1` first.")
+    }
+
+    fn load_multi_entry_v2_wasm() -> Vec<u8> {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("../../target/wasm32v1-none/release/multi_entry_v2.wasm");
+        std::fs::read(&path).expect("Failed to read multi_entry_v2 WASM. Run `cargo build --target wasm32v1-none -p multi_entry_v2` first.")
+    }
+
     /// Build a V1 state entry for `DataKey::Record(owner)` with `Record { owner, value }`.
     fn make_v1_state_entry(owner: &soroban_sdk::Address, value: u64) -> StateEntry {
         let owner_addr = format!("{}", owner.to_string());
@@ -335,6 +347,35 @@ mod tests {
         let mut fields = BTreeMap::new();
         fields.insert("owner".to_string(), StateValue::Address(owner_addr.clone()));
         fields.insert("value".to_string(), StateValue::U64(value));
+        fields.insert("version".to_string(), StateValue::U32(version));
+
+        StateEntry {
+            durability: Durability::Persistent,
+            key: StateValue::Address(owner_addr),
+            value: StateValue::Struct(fields),
+        }
+    }
+
+    /// Build a V1 User state entry for `DataKey::User(owner)` with `UserRecord { balance, owner }`.
+    fn make_user_v1_entry(owner: &soroban_sdk::Address, balance: u64) -> StateEntry {
+        let owner_addr = format!("{}", owner.to_string());
+        let mut fields = BTreeMap::new();
+        fields.insert("balance".to_string(), StateValue::U64(balance));
+        fields.insert("owner".to_string(), StateValue::Address(owner_addr.clone()));
+
+        StateEntry {
+            durability: Durability::Persistent,
+            key: StateValue::Address(owner_addr),
+            value: StateValue::Struct(fields),
+        }
+    }
+
+    /// Build a V2 User state entry for `DataKey::User(owner)` with `UserRecordV2 { balance, owner, version }`.
+    fn make_user_v2_entry(owner: &soroban_sdk::Address, balance: u64, version: u32) -> StateEntry {
+        let owner_addr = format!("{}", owner.to_string());
+        let mut fields = BTreeMap::new();
+        fields.insert("balance".to_string(), StateValue::U64(balance));
+        fields.insert("owner".to_string(), StateValue::Address(owner_addr.clone()));
         fields.insert("version".to_string(), StateValue::U32(version));
 
         StateEntry {
@@ -1182,5 +1223,316 @@ mod tests {
         }
 
         println!("✓ Explicit arguments without initial state test passed");
+    }
+
+    // ─── TEST 16: Multi-Entry V1 → V2 Migration ────────────────────────────
+
+    #[test]
+    fn test_multi_entry_v1_to_v2_migration() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let user_a = soroban_sdk::Address::generate(&env);
+        let user_b = soroban_sdk::Address::generate(&env);
+        let user_c = soroban_sdk::Address::generate(&env);
+
+        let user_a_str = format!("{}", user_a.to_string());
+        let user_b_str = format!("{}", user_b.to_string());
+        let user_c_str = format!("{}", user_c.to_string());
+
+        let entry_a = make_user_v1_entry(&user_a, 100);
+        let entry_b = make_user_v1_entry(&user_b, 250);
+        let entry_c = make_user_v1_entry(&user_c, 500);
+
+        let input = MigrationInput {
+            contract_id: "test-multi-entry-v1-v2".to_string(),
+            wasm: load_multi_entry_v2_wasm(),
+            initial_state: vec![entry_a, entry_b, entry_c],
+            key_prefix: "User".to_string(),
+            migration_fn: "migrate_users".to_string(),
+            migration_args: Some(vec![StateValue::Vec(vec![
+                StateValue::Address(user_a_str.clone()),
+                StateValue::Address(user_b_str.clone()),
+                StateValue::Address(user_c_str.clone()),
+            ])]),
+        };
+
+        let result =
+            MigrationEngine::execute(&input).expect("Multi-entry migration should not fail");
+        assert!(result.success, "Multi-entry migration must succeed");
+
+        // Verify PRE-STATE: 3 entries, all without version field
+        assert_eq!(
+            result.pre_state.entries.len(),
+            3,
+            "Pre-state should contain 3 user records"
+        );
+        for entry in &result.pre_state.entries {
+            if let StateValue::Struct(f) = &entry.value {
+                assert!(
+                    !f.contains_key("version"),
+                    "Pre-state user record must not have version"
+                );
+                assert!(
+                    f.contains_key("balance"),
+                    "Pre-state user record must have balance"
+                );
+                assert!(
+                    f.contains_key("owner"),
+                    "Pre-state user record must have owner"
+                );
+            } else {
+                panic!("Pre-state value must be a Struct");
+            }
+        }
+
+        // Verify POST-STATE: 3 entries, all upgraded with version = 2 and preserved fields
+        assert_eq!(
+            result.post_state.entries.len(),
+            3,
+            "Post-state should contain 3 user records"
+        );
+
+        let check_user = |owner: &soroban_sdk::Address, expected_balance: u64| {
+            let owner_str = format!("{}", owner.to_string());
+            let expected_entry = make_user_v2_entry(owner, expected_balance, 2);
+            let entry = result
+                .post_state
+                .entries
+                .iter()
+                .find(|e| {
+                    if let StateValue::Struct(f) = &e.value {
+                        f.get("owner") == Some(&StateValue::Address(owner_str.clone()))
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or_else(|| panic!("User {} must exist in post-state", owner_str));
+
+            assert_eq!(
+                entry.value, expected_entry.value,
+                "Entry value must match expected V2 schema for user {}",
+                owner_str
+            );
+        };
+
+        check_user(&user_a, 100);
+        check_user(&user_b, 250);
+        check_user(&user_c, 500);
+
+        println!("✓ Multi-entry V1 → V2 migration test passed");
+    }
+
+    // ─── TEST 17: Multi-Entry State Diff Detection ──────────────────────────
+
+    #[test]
+    fn test_multi_entry_state_diff_detection() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let user_a = soroban_sdk::Address::generate(&env);
+        let user_b = soroban_sdk::Address::generate(&env);
+        let user_c = soroban_sdk::Address::generate(&env);
+
+        let user_a_str = format!("{}", user_a.to_string());
+        let user_b_str = format!("{}", user_b.to_string());
+        let user_c_str = format!("{}", user_c.to_string());
+
+        let entry_a = make_user_v1_entry(&user_a, 100);
+        let entry_b = make_user_v1_entry(&user_b, 250);
+        let entry_c = make_user_v1_entry(&user_c, 500);
+
+        let input = MigrationInput {
+            contract_id: "test-multi-diff".to_string(),
+            wasm: load_multi_entry_v2_wasm(),
+            initial_state: vec![entry_a, entry_b, entry_c],
+            key_prefix: "User".to_string(),
+            migration_fn: "migrate_users".to_string(),
+            migration_args: Some(vec![StateValue::Vec(vec![
+                StateValue::Address(user_a_str),
+                StateValue::Address(user_b_str),
+                StateValue::Address(user_c_str),
+            ])]),
+        };
+
+        let result = MigrationEngine::execute(&input).expect("Migration should not fail");
+        assert!(result.success);
+
+        let diff = result.pre_state.diff(&result.post_state);
+
+        assert_eq!(diff.added_count(), 0, "No entries should be added");
+        assert_eq!(diff.removed_count(), 0, "No entries should be removed");
+        assert_eq!(diff.unchanged_count(), 0, "No entries should be unchanged");
+        assert_eq!(
+            diff.modified_count(),
+            3,
+            "Exactly 3 entries must be modified"
+        );
+        assert!(diff.has_changes(), "Diff must report changes");
+
+        // Verify each modified entry detected the version field addition
+        for modified in &diff.modified {
+            let version_added = modified.nested_changes.iter().any(|c| {
+                matches!(
+                    c,
+                    state_engine::NestedChange::FieldAdded {
+                        field_name,
+                        value: StateValue::U32(2)
+                    } if field_name == "version"
+                )
+            });
+            assert!(
+                version_added,
+                "Diff must detect that 'version' field was added with value 2"
+            );
+        }
+
+        println!("✓ Multi-entry state diff detection test passed");
+    }
+
+    // ─── TEST 18: Multi-Entry Partial Migration ─────────────────────────────
+
+    #[test]
+    fn test_multi_entry_partial_migration() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let user_a = soroban_sdk::Address::generate(&env);
+        let user_b = soroban_sdk::Address::generate(&env);
+        let user_c = soroban_sdk::Address::generate(&env);
+
+        let user_a_str = format!("{}", user_a.to_string());
+        let user_b_str = format!("{}", user_b.to_string());
+
+        let entry_a = make_user_v1_entry(&user_a, 100);
+        let entry_b = make_user_v1_entry(&user_b, 250);
+        let entry_c = make_user_v1_entry(&user_c, 500);
+
+        // Migrate only user_a and user_b; user_c remains unmigrated (V1)
+        let input = MigrationInput {
+            contract_id: "test-partial-migration".to_string(),
+            wasm: load_multi_entry_v2_wasm(),
+            initial_state: vec![entry_a, entry_b, entry_c],
+            key_prefix: "User".to_string(),
+            migration_fn: "migrate_users".to_string(),
+            migration_args: Some(vec![StateValue::Vec(vec![
+                StateValue::Address(user_a_str),
+                StateValue::Address(user_b_str),
+            ])]),
+        };
+
+        let result = MigrationEngine::execute(&input).expect("Migration should not fail");
+        assert!(result.success);
+
+        let diff = result.pre_state.diff(&result.post_state);
+
+        assert_eq!(
+            diff.modified_count(),
+            2,
+            "Exactly 2 entries must be modified"
+        );
+        assert_eq!(
+            diff.unchanged_count(),
+            1,
+            "Exactly 1 entry must remain unchanged (user_c)"
+        );
+
+        println!("✓ Multi-entry partial migration test passed");
+    }
+
+    // ─── TEST 19: Multi-Entry Determinism ───────────────────────────────────
+
+    #[test]
+    fn test_multi_entry_determinism() {
+        let env = Env::default();
+        let user_a = soroban_sdk::Address::generate(&env);
+        let user_b = soroban_sdk::Address::generate(&env);
+        let user_c = soroban_sdk::Address::generate(&env);
+
+        let user_a_str = format!("{}", user_a.to_string());
+        let user_b_str = format!("{}", user_b.to_string());
+        let user_c_str = format!("{}", user_c.to_string());
+
+        let run_multi_entry = || -> MigrationResult {
+            let entry_a = make_user_v1_entry(&user_a, 100);
+            let entry_b = make_user_v1_entry(&user_b, 250);
+            let entry_c = make_user_v1_entry(&user_c, 500);
+
+            let input = MigrationInput {
+                contract_id: "test-multi-entry-determinism".to_string(),
+                wasm: load_multi_entry_v2_wasm(),
+                initial_state: vec![entry_a, entry_b, entry_c],
+                key_prefix: "User".to_string(),
+                migration_fn: "migrate_users".to_string(),
+                migration_args: Some(vec![StateValue::Vec(vec![
+                    StateValue::Address(user_a_str.clone()),
+                    StateValue::Address(user_b_str.clone()),
+                    StateValue::Address(user_c_str.clone()),
+                ])]),
+            };
+
+            MigrationEngine::execute(&input).expect("Migration should succeed")
+        };
+
+        let r1 = run_multi_entry();
+        let r2 = run_multi_entry();
+
+        assert!(r1.success);
+        assert!(r2.success);
+
+        assert_eq!(
+            r1.pre_state.fingerprint(),
+            r2.pre_state.fingerprint(),
+            "Pre-state fingerprints must be identical across runs"
+        );
+        assert_eq!(
+            r1.post_state.fingerprint(),
+            r2.post_state.fingerprint(),
+            "Post-state fingerprints must be identical across runs"
+        );
+        assert_eq!(r1.pre_state.entries, r2.pre_state.entries);
+        assert_eq!(r1.post_state.entries, r2.post_state.entries);
+
+        println!("✓ Multi-entry determinism test passed");
+    }
+
+    // ─── TEST 20: Multi-Entry Failed Migration ──────────────────────────────
+
+    #[test]
+    fn test_multi_entry_failed_migration() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let user = soroban_sdk::Address::generate(&env);
+        let entry = make_user_v1_entry(&user, 100);
+
+        // MultiEntryV1Contract has no "migrate_users" function, so invocation fails
+        let input = MigrationInput {
+            contract_id: "test-multi-fail".to_string(),
+            wasm: load_multi_entry_v1_wasm(),
+            initial_state: vec![entry],
+            key_prefix: "User".to_string(),
+            migration_fn: "migrate_users".to_string(),
+            migration_args: Some(vec![StateValue::Vec(vec![StateValue::Address(format!(
+                "{}",
+                user.to_string()
+            ))])]),
+        };
+
+        let result = MigrationEngine::execute(&input);
+        match result {
+            Ok(r) => {
+                assert!(
+                    !r.success,
+                    "Migration must fail when function does not exist on V1"
+                );
+                assert!(r.error.is_some());
+                assert_eq!(r.pre_state.entries.len(), 1);
+            }
+            Err(MigrationError::ContractInvocationFailure(_)) => {}
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+
+        println!("✓ Multi-entry failed migration test passed");
     }
 }
