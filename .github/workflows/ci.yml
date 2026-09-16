@@ -17,7 +17,10 @@ jobs:
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
       with:
+        targets: wasm32v1-none
         components: rustfmt, clippy
+    - name: Build fixtures
+      run: cargo build --target wasm32v1-none -p migration_v1 -p migration_v2 --release
     - name: Check formatting
       run: cargo fmt --check
     - name: Check compilation
