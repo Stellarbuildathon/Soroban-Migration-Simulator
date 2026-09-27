@@ -153,6 +153,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, branching c
 
 See [ROADMAP.md](ROADMAP.md) for completed work and future contribution opportunities.
 
+## Contributors
+
+Thanks to everyone helping build SMS! See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the full list.
+
+<!-- ALL-CONTRIBUTORS-BADGE:START -->
+[![Contributors](https://img.shields.io/github/contributors/Chigybillionz/Soroban-Migration-Simulator?style=flat-square&color=blue)](CONTRIBUTORS.md)
+<!-- ALL-CONTRIBUTORS-BADGE:END -->
+
+Want to see your profile here? Check out [CONTRIBUTING.md](CONTRIBUTING.md) to get started, then add yourself to [CONTRIBUTORS.md](CONTRIBUTORS.md).
+
 ## License
 
 SMS is licensed under the [Apache License, Version 2.0](LICENSE).
