@@ -14,18 +14,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: wasm32v1-none
         components: rustfmt, clippy
-    - name: Build fixtures
-      run: cargo build --target wasm32v1-none -p migration_v1 -p migration_v2 --release
+        targets: wasm32v1-none
+
+    - name: Build Soroban migration fixtures
+      run: |
+        cargo build --target wasm32v1-none --release -p migration_v1 -p migration_v2 -p multi_entry_v1 -p multi_entry_v2
+
     - name: Check formatting
       run: cargo fmt --check
+
     - name: Check compilation
       run: cargo check --workspace
+
     - name: Run lints
       run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
     - name: Run tests
       run: cargo test --workspace
