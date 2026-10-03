@@ -3,7 +3,9 @@ resolver = "2"
 members = [
     "crates/*",
     "contracts/fixtures/migration_v1",
-    "contracts/fixtures/migration_v2"
+    "contracts/fixtures/migration_v2",
+    "contracts/fixtures/multi_entry_v1",
+    "contracts/fixtures/multi_entry_v2"
 ]
 
 [workspace.dependencies]

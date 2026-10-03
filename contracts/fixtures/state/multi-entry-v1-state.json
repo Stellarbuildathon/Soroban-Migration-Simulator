@@ -1,0 +1,65 @@
+{
+  "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+  "entries": [
+    {
+      "durability": "Persistent",
+      "key": {
+        "type": "Address",
+        "value": "GACQ52L6CVSK7O6R3T4D2V6FHKJMYW4R5U7E2B4Z1M8X9P0Q7C5V3A1B"
+      },
+      "value": {
+        "type": "Struct",
+        "value": {
+          "balance": {
+            "type": "U64",
+            "value": 500
+          },
+          "owner": {
+            "type": "Address",
+            "value": "GACQ52L6CVSK7O6R3T4D2V6FHKJMYW4R5U7E2B4Z1M8X9P0Q7C5V3A1B"
+          }
+        }
+      }
+    },
+    {
+      "durability": "Persistent",
+      "key": {
+        "type": "Address",
+        "value": "GBZXN7PIRZGNMHGA728RGRTDGBLTCGXGEDM3GT3YTISSXUPQEYO6CQGD"
+      },
+      "value": {
+        "type": "Struct",
+        "value": {
+          "balance": {
+            "type": "U64",
+            "value": 250
+          },
+          "owner": {
+            "type": "Address",
+            "value": "GBZXN7PIRZGNMHGA728RGRTDGBLTCGXGEDM3GT3YTISSXUPQEYO6CQGD"
+          }
+        }
+      }
+    },
+    {
+      "durability": "Persistent",
+      "key": {
+        "type": "Address",
+        "value": "GDIY6AQQ75WMD4W46EYB7O6UYMHOCGQHJCQYNKP4XZB2Z2N5V4M5QO6B"
+      },
+      "value": {
+        "type": "Struct",
+        "value": {
+          "balance": {
+            "type": "U64",
+            "value": 100
+          },
+          "owner": {
+            "type": "Address",
+            "value": "GDIY6AQQ75WMD4W46EYB7O6UYMHOCGQHJCQYNKP4XZB2Z2N5V4M5QO6B"
+          }
+        }
+      }
+    }
+  ]
+}
