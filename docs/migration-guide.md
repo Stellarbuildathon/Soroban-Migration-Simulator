@@ -112,6 +112,222 @@ let diff = pre_state.diff(&post_state);
 // diff.unchanged — identical entries
 ```
 
+### 6. Migration Report Generation
+
+The `report` crate converts migration results and deterministic state differences into structured, developer-readable reports designed for CLI integration and automation workflows.
+
+```rust
+use report::MigrationReport;
+
+// Generate report from a migration result
+let report = MigrationReport::from_result(
+    "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "migrate_record",
+    &result,
+);
+
+// Or generate directly from input and result:
+let report = MigrationReport::from_execution(&input, &result);
+
+// Serialize to deterministic, pretty-printed JSON
+let json_output = report.to_json_pretty()?;
+
+// Print human-readable report for terminal display (also available via Display trait)
+println!("{}", report);
+```
+
+## Migration Report Format
+
+The migration report captures metadata, state change counts, and field-level differences in a structured format:
+
+```rust
+pub struct MigrationReport {
+    pub contract_id: String,
+    pub migration_function: String,
+    pub success: bool,
+    pub duration_ms: u64,
+    pub summary: DiffSummary,
+    pub changes: StateDiff,
+    pub error: Option<String>,
+}
+```
+
+### Report Metadata
+- `contract_id`: Unique identifier of the contract migrated.
+- `migration_function`: Name of the migration entrypoint executed.
+- `success`: Execution status (`true` if migration succeeded without panic/error).
+- `duration_ms`: Total execution duration in milliseconds (pre-capture + execution + post-capture).
+- `error`: Optional error details if the migration failed (omitted from serialized JSON on success).
+
+### State Change Summary (`DiffSummary`)
+- `added`: Number of new storage entries created.
+- `removed`: Number of storage entries deleted.
+- `modified`: Number of storage entries whose values changed.
+- `unchanged`: Number of storage entries whose values remained identical.
+
+### Detailed State Differences (`StateDiff`)
+- `added`: List of `StateEntry` items present only in post-state.
+- `removed`: List of `StateEntry` items present only in pre-state.
+- `modified`: List of `ModifiedEntry` items with before/after values and structured `nested_changes` detailing:
+  - `FieldAdded`: Newly introduced fields in structs.
+  - `FieldRemoved`: Removed fields from structs.
+  - `FieldModified`: Fields whose values changed.
+- `unchanged`: List of `StateEntry` items unchanged by the migration.
+
+### Example JSON Output (Successful Migration)
+
+```json
+{
+  "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+  "migration_function": "migrate_record",
+  "success": true,
+  "duration_ms": 42,
+  "summary": {
+    "added": 0,
+    "removed": 0,
+    "modified": 1,
+    "unchanged": 1
+  },
+  "changes": {
+    "added": [],
+    "removed": [],
+    "modified": [
+      {
+        "key": {
+          "type": "Address",
+          "value": "GBZXN7PIRZGNMHGA728VY3CWVSCCSTKQQRMAIVYEQYBNVV5JAXFVOHDH"
+        },
+        "before": {
+          "type": "Struct",
+          "value": {
+            "owner": {
+              "type": "Address",
+              "value": "GBZXN7PIRZGNMHGA728VY3CWVSCCSTKQQRMAIVYEQYBNVV5JAXFVOHDH"
+            },
+            "value": {
+              "type": "U64",
+              "value": 100
+            }
+          }
+        },
+        "after": {
+          "type": "Struct",
+          "value": {
+            "owner": {
+              "type": "Address",
+              "value": "GBZXN7PIRZGNMHGA728VY3CWVSCCSTKQQRMAIVYEQYBNVV5JAXFVOHDH"
+            },
+            "value": {
+              "type": "U64",
+              "value": 100
+            },
+            "version": {
+              "type": "U32",
+              "value": 2
+            }
+          }
+        },
+        "nested_changes": [
+          {
+            "FieldAdded": {
+              "field_name": "version",
+              "value": {
+                "type": "U32",
+                "value": 2
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "unchanged": [
+      {
+        "durability": "Persistent",
+        "key": {
+          "type": "Symbol",
+          "value": "Admin"
+        },
+        "value": {
+          "type": "Address",
+          "value": "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7"
+        }
+      }
+    ]
+  }
+}
+```
+
+### Example JSON Output (Failed Migration)
+
+```json
+{
+  "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+  "migration_function": "migrate_record",
+  "success": false,
+  "duration_ms": 12,
+  "summary": {
+    "added": 0,
+    "removed": 0,
+    "modified": 0,
+    "unchanged": 2
+  },
+  "changes": {
+    "added": [],
+    "removed": [],
+    "modified": [],
+    "unchanged": [
+      {
+        "durability": "Persistent",
+        "key": {
+          "type": "Address",
+          "value": "GBZXN7PIRZGNMHGA728VY3CWVSCCSTKQQRMAIVYEQYBNVV5JAXFVOHDH"
+        },
+        "value": {
+          "type": "Struct",
+          "value": {
+            "owner": {
+              "type": "Address",
+              "value": "GBZXN7PIRZGNMHGA728VY3CWVSCCSTKQQRMAIVYEQYBNVV5JAXFVOHDH"
+            },
+            "value": {
+              "type": "U64",
+              "value": 100
+            }
+          }
+        }
+      }
+    ]
+  },
+  "error": "Contract invocation failed: host panic: function 'migrate_record' does not exist on contract"
+}
+```
+
+### Developer-Readable CLI Output Example
+
+```text
+================================================================================
+                    SOROBAN MIGRATION SIMULATION REPORT
+================================================================================
+Contract ID:        CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+Migration Function: migrate_record
+Execution Status:   SUCCESS
+Duration:           42 ms
+
+State Change Summary:
+  Added Entries:    0
+  Removed Entries:  0
+  Modified Entries: 1
+  Unchanged:        1
+  Total Changes:    1
+
+Detailed State Differences:
+  [MODIFIED ENTRIES] (1)
+    * Key: Address("GBZXN7PIRZGNMHGA728VY3CWVSCCSTKQQRMAIVYEQYBNVV5JAXFVOHDH")
+      + Field Added: 'version' = U32(2)
+================================================================================
+```
+
+
 ## Creating a Custom Migration Test
 
 1. **Define your contract** with `#[contract]` and `#[contractimpl]`.
