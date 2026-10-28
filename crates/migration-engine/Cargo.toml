@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 state-engine = { path = "../state-engine" }
+invariant-engine = { path = "../invariant-engine" }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 soroban-ledger-snapshot = "26.1.1"
 stellar-xdr = { version = "26.0.1", features = ["std"], default-features = false }

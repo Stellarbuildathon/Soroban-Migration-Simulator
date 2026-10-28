@@ -3,6 +3,9 @@ pub mod conversion;
 
 use soroban_sdk::{Env, Symbol, Val, Vec as SorobanVec};
 
+pub use invariant_engine::{
+    self, check_invariants, InvariantEngine, InvariantReport, InvariantResult, InvariantRule,
+};
 use state_engine::{ContractState, Durability, StateEntry, StateValue};
 use thiserror::Error;
 
@@ -88,6 +91,23 @@ pub struct MigrationResult {
 
     /// Execution timing information.
     pub execution_info: ExecutionInfo,
+}
+
+impl MigrationResult {
+    /// Evaluate migration invariant rules against pre-state and post-state.
+    pub fn check_invariants(&self, rules: &[InvariantRule]) -> InvariantReport {
+        invariant_engine::check_invariants(rules, &self.pre_state, &self.post_state)
+    }
+
+    /// Compute state diff and evaluate migration invariants.
+    pub fn diff_and_check_invariants(
+        &self,
+        rules: &[InvariantRule],
+    ) -> (state_engine::StateDiff, InvariantReport) {
+        let diff = self.pre_state.diff(&self.post_state);
+        let invariants = self.check_invariants(rules);
+        (diff, invariants)
+    }
 }
 
 /// Timing and metadata about execution.
@@ -1534,5 +1554,40 @@ mod tests {
         }
 
         println!("✓ Multi-entry failed migration test passed");
+    }
+
+    #[test]
+    fn test_migration_invariant_checking_pipeline() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let owner = soroban_sdk::Address::generate(&env);
+        let v1_state = make_v1_state_entry(&owner, 100);
+
+        let input = MigrationInput {
+            contract_id: "test-invariants-pipeline".to_string(),
+            wasm: load_v2_wasm(),
+            initial_state: vec![v1_state],
+            key_prefix: "Record".to_string(),
+            migration_fn: "migrate_record".to_string(),
+            migration_args: None,
+        };
+
+        let result = MigrationEngine::execute(&input).expect("Migration should not fail");
+        assert!(result.success);
+
+        let rules = vec![
+            InvariantRule::FieldPreserved {
+                field: "owner".to_string(),
+            },
+            InvariantRule::FieldPreserved {
+                field: "value".to_string(),
+            },
+            InvariantRule::NoEntryRemoved,
+        ];
+
+        let (diff, report) = result.diff_and_check_invariants(&rules);
+        assert!(report.passed);
+        assert_eq!(report.passed_count, 3);
+        assert_eq!(diff.modified.len(), 1);
     }
 }
