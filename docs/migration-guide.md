@@ -328,6 +328,67 @@ Detailed State Differences:
 ```
 
 
+## Migration Safety Invariant Checks
+
+The safety verification layer in `invariant-engine` allows developers to define and verify critical safety invariants before deploying contract migrations. Migration invariants are assertions that must hold true after migration execution.
+
+### The Verification Pipeline
+
+```text
+Migration Engine (execute)
+        ↓
+State Diff Engine (diff pre vs post)
+        ↓
+Invariant Engine (evaluate safety rules)
+        ↓
+Migration Result (structured InvariantReport)
+```
+
+### Supported Invariant Rules
+
+| Rule | Description | Example |
+|---|---|---|
+| `FieldPreserved { field }` | Ensures a specific struct field's value is never altered or dropped across migration | Owner preservation, user identity integrity |
+| `ValueUnchanged { key }` | Ensures the value of a protected storage key remains identical | Admin address, contract configuration parameters |
+| `EntryMustExist { key }` | Ensures a required storage key exists in the post-migration state | Critical registry entries, protocol pause flags |
+| `DurabilityPreserved { key }` | Ensures storage durability (Persistent / Instance / Temporary) is preserved | Instance state not degraded to temporary |
+| `NoEntryRemoved` | Enforces that no existing pre-migration state entries were deleted | Append-only or non-destructive migrations |
+
+### Example Usage
+
+```rust
+use migration_engine::{MigrationEngine, MigrationInput, InvariantRule};
+
+let input = MigrationInput {
+    contract_id: "my-contract".to_string(),
+    wasm: v2_wasm_bytes,
+    initial_state: pre_migration_entries,
+    key_prefix: "Record".to_string(),
+    migration_fn: "migrate_record".to_string(),
+    migration_args: None,
+};
+
+let result = MigrationEngine::execute(&input)?;
+
+// Define safety rules
+let rules = vec![
+    InvariantRule::FieldPreserved { field: "owner".to_string() },
+    InvariantRule::FieldPreserved { field: "balance".to_string() },
+    InvariantRule::EntryMustExist { key: StateValue::Symbol("Config".to_string()) },
+    InvariantRule::NoEntryRemoved,
+];
+
+// Evaluate invariants
+let (diff, report) = result.diff_and_check_invariants(&rules);
+
+if !report.passed {
+    for failure in report.results.iter().filter(|r| !r.passed) {
+        eprintln!("Invariant violated [{}]: {}", failure.rule, failure.message);
+    }
+    panic!("Migration safety check failed!");
+}
+```
+
 ## Creating a Custom Migration Test
 
 1. **Define your contract** with `#[contract]` and `#[contractimpl]`.

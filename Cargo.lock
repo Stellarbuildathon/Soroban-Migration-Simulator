@@ -976,6 +976,13 @@ checksum = "8e04e2fd2b8188ea827b32ef11de88377086d690286ab35747ef7f9bf3ccb590"
 [[package]]
 name = "invariant-engine"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "soroban-sdk",
+ "state-engine",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "itertools"
@@ -1117,6 +1124,7 @@ name = "migration-engine"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "invariant-engine",
  "serde",
  "soroban-ledger-snapshot",
  "soroban-sdk",
@@ -1358,6 +1366,13 @@ dependencies = [
 [[package]]
 name = "report"
 version = "0.1.0"
+dependencies = [
+ "migration-engine",
+ "serde",
+ "serde_json",
+ "state-engine",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "rfc6979"
